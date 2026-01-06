@@ -31,7 +31,7 @@ export default function Home() {
   const [minute, setMinute] = useState<number>(0);
   const [gender, setGender] = useState<'male' | 'female'>('female');
   const [city, setCity] = useState<CityInfo>(DEFAULT_CITY);
-  const [isLunar, setIsLunar] = useState(false);
+  const [isLunar, setIsLunar] = useState(false); // 默认公历
   
   // 解析状态
   const [parseConfidence, setParseConfidence] = useState<number>(0);

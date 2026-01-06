@@ -118,27 +118,6 @@ export const WUXING_KE_WO: Record<WuxingType, WuxingType> = {
   '土': '木',
 };
 
-// 月令旺相休囚死（调整权重）
-export const YUELING_WANGXIANG: Record<string, Record<WuxingType, number>> = {
-  // 春季（寅卯月）- 木旺
-  '寅': { '木': 4, '火': 2, '土': -2, '金': -3, '水': 1 },
-  '卯': { '木': 4, '火': 2, '土': -2, '金': -3, '水': 1 },
-  // 夏季（巳午月）- 火旺
-  '巳': { '火': 4, '土': 2, '金': -2, '水': -3, '木': 1 },
-  '午': { '火': 4, '土': 2, '金': -2, '水': -3, '木': 1 },
-  // 秋季（申酉月）- 金旺
-  '申': { '金': 4, '水': 2, '木': -2, '火': -3, '土': 1 },
-  '酉': { '金': 4, '水': 2, '木': -2, '火': -3, '土': 1 },
-  // 冬季（亥子月）- 水旺
-  '亥': { '水': 4, '木': 2, '火': -2, '土': -3, '金': 1 },
-  '子': { '水': 4, '木': 2, '火': -2, '土': -3, '金': 1 },
-  // 四季土月（辰戌丑未）- 土旺
-  '辰': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
-  '戌': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
-  '丑': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
-  '未': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
-};
-
 // 旺衰等级
 export type WangShuaiLevel = '过强' | '偏强' | '中和' | '偏弱' | '过弱';
 
@@ -178,47 +157,43 @@ export interface BaziAnalysisResult {
 }
 
 /**
- * 计算五行力量（考虑藏干）
+ * 计算五行力量（改进版）
+ * 更准确地计算各五行的实际力量
  */
-function calculateWuxingStrength(tianGan: string[], diZhi: string[], yueZhi: string): Record<WuxingType, number> {
+function calculateWuxingStrength(tianGan: string[], diZhi: string[]): Record<WuxingType, number> {
   const strength: Record<WuxingType, number> = {
     '金': 0, '水': 0, '木': 0, '火': 0, '土': 0
   };
   
-  // 天干力量（每个天干基础值10）
-  for (const gan of tianGan) {
-    const wx = TIANGAN_WUXING[gan];
-    strength[wx] += 10;
+  // 天干力量（透出的力量较强）
+  // 年干、月干、日干、时干的权重
+  const tianGanWeights = [10, 12, 0, 10]; // 日干不计入（是被分析对象）
+  for (let i = 0; i < tianGan.length; i++) {
+    if (i === 2) continue; // 跳过日干
+    const wx = TIANGAN_WUXING[tianGan[i]];
+    strength[wx] += tianGanWeights[i];
   }
   
-  // 地支本气力量（每个地支本气基础值10）
-  for (const zhi of diZhi) {
-    const wx = DIZHI_WUXING[zhi];
-    strength[wx] += 10;
+  // 地支本气力量
+  // 年支、月支、日支、时支的权重
+  const diZhiWeights = [8, 12, 10, 8];
+  for (let i = 0; i < diZhi.length; i++) {
+    const wx = DIZHI_WUXING[diZhi[i]];
+    strength[wx] += diZhiWeights[i];
   }
   
-  // 地支藏干力量（藏干力量较弱）
-  for (const zhi of diZhi) {
+  // 地支藏干力量
+  for (let i = 0; i < diZhi.length; i++) {
+    const zhi = diZhi[i];
     const canggan = DIZHI_CANGGAN[zhi];
     if (canggan) {
+      const baseWeight = diZhiWeights[i] * 0.4;
       canggan.forEach((gan, index) => {
         const wx = TIANGAN_WUXING[gan];
         // 本气最强，中气次之，余气最弱
-        const power = index === 0 ? 5 : (index === 1 ? 3 : 2);
+        const power = index === 0 ? baseWeight : (index === 1 ? baseWeight * 0.5 : baseWeight * 0.3);
         strength[wx] += power;
       });
-    }
-  }
-  
-  // 月令加成（当令五行力量翻倍）
-  const wangxiang = YUELING_WANGXIANG[yueZhi];
-  if (wangxiang) {
-    for (const wx of WUXING) {
-      if (wangxiang[wx] > 0) {
-        strength[wx] *= (1 + wangxiang[wx] * 0.2);
-      } else if (wangxiang[wx] < 0) {
-        strength[wx] *= (1 + wangxiang[wx] * 0.1);
-      }
     }
   }
   
@@ -226,169 +201,177 @@ function calculateWuxingStrength(tianGan: string[], diZhi: string[], yueZhi: str
 }
 
 /**
- * 计算得令分数
+ * 计算日干的实际力量（核心改进）
+ * 直接统计帮助和损害日干的干支数量和力量
  */
-function calculateDeLing(riGanWuxing: WuxingType, yueZhi: string): number {
-  const wangxiang = YUELING_WANGXIANG[yueZhi];
-  if (!wangxiang) return 0;
-  return wangxiang[riGanWuxing] * 8;
-}
-
-/**
- * 计算得地分数
- */
-function calculateDeDi(riGanWuxing: WuxingType, diZhi: string[]): number {
-  let score = 0;
-  const shengWo = WUXING_SHENG_WO[riGanWuxing];
+function calculateRiGanStrength(
+  riGanWuxing: WuxingType,
+  tianGan: string[],
+  diZhi: string[]
+): { helpScore: number; hurtScore: number; netScore: number } {
+  const shengWo = WUXING_SHENG_WO[riGanWuxing]; // 生我的（印星）
+  const keWo = WUXING_KE_WO[riGanWuxing];       // 克我的（官杀）
+  const woKe = WUXING_KE[riGanWuxing];          // 我克的（财星）
+  const woSheng = WUXING_SHENG[riGanWuxing];    // 我生的（食伤）
   
-  for (const zhi of diZhi) {
-    // 本气
-    const zhiWuxing = DIZHI_WUXING[zhi];
-    if (zhiWuxing === riGanWuxing) {
-      score += 10;
-    } else if (zhiWuxing === shengWo) {
-      score += 6;
-    }
-    
-    // 藏干
-    const canggan = DIZHI_CANGGAN[zhi];
-    if (canggan) {
-      for (const gan of canggan) {
-        const ganWuxing = TIANGAN_WUXING[gan];
-        if (ganWuxing === riGanWuxing) {
-          score += 3;
-        } else if (ganWuxing === shengWo) {
-          score += 2;
-        }
-      }
-    }
-  }
+  let helpScore = 0;
+  let hurtScore = 0;
   
-  return score;
-}
-
-/**
- * 计算得势分数
- */
-function calculateDeShi(riGanWuxing: WuxingType, tianGan: string[], riGanIndex: number = 2): number {
-  let score = 0;
-  const shengWo = WUXING_SHENG_WO[riGanWuxing];
-  const keWo = WUXING_KE_WO[riGanWuxing];
-  const woKe = WUXING_KE[riGanWuxing];
-  const woSheng = WUXING_SHENG[riGanWuxing];
+  // 天干权重
+  const tianGanWeights = [10, 12, 0, 10];
   
+  // 分析天干
   for (let i = 0; i < tianGan.length; i++) {
-    if (i === riGanIndex) continue;
-    
+    if (i === 2) continue; // 跳过日干
     const ganWuxing = TIANGAN_WUXING[tianGan[i]];
+    const weight = tianGanWeights[i];
+    
     if (ganWuxing === riGanWuxing) {
-      score += 8; // 比肩劫财
+      helpScore += weight * 1.0; // 比劫帮身
     } else if (ganWuxing === shengWo) {
-      score += 6; // 印星
+      helpScore += weight * 0.8; // 印星生身
     } else if (ganWuxing === keWo) {
-      score -= 6; // 官杀
+      hurtScore += weight * 1.2; // 官杀克身
     } else if (ganWuxing === woKe) {
-      score -= 4; // 财星耗身
+      hurtScore += weight * 0.8; // 财星耗身
     } else if (ganWuxing === woSheng) {
-      score -= 2; // 食伤泄气
+      hurtScore += weight * 0.6; // 食伤泄身
     }
   }
   
-  return score;
+  // 地支权重
+  const diZhiWeights = [8, 12, 10, 8];
+  
+  // 分析地支本气
+  for (let i = 0; i < diZhi.length; i++) {
+    const zhiWuxing = DIZHI_WUXING[diZhi[i]];
+    const weight = diZhiWeights[i];
+    
+    if (zhiWuxing === riGanWuxing) {
+      helpScore += weight * 0.8; // 比劫帮身（地支力量稍弱）
+    } else if (zhiWuxing === shengWo) {
+      helpScore += weight * 0.6; // 印星生身
+    } else if (zhiWuxing === keWo) {
+      hurtScore += weight * 1.0; // 官杀克身
+    } else if (zhiWuxing === woKe) {
+      hurtScore += weight * 0.6; // 财星耗身
+    } else if (zhiWuxing === woSheng) {
+      hurtScore += weight * 0.5; // 食伤泄身
+    }
+  }
+  
+  // 分析地支藏干
+  for (let i = 0; i < diZhi.length; i++) {
+    const zhi = diZhi[i];
+    const canggan = DIZHI_CANGGAN[zhi];
+    if (!canggan) continue;
+    
+    const baseWeight = diZhiWeights[i] * 0.3;
+    
+    canggan.forEach((gan, index) => {
+      const ganWuxing = TIANGAN_WUXING[gan];
+      const power = index === 0 ? baseWeight : (index === 1 ? baseWeight * 0.5 : baseWeight * 0.3);
+      
+      if (ganWuxing === riGanWuxing) {
+        helpScore += power * 0.6;
+      } else if (ganWuxing === shengWo) {
+        helpScore += power * 0.5;
+      } else if (ganWuxing === keWo) {
+        hurtScore += power * 0.7;
+      } else if (ganWuxing === woKe) {
+        hurtScore += power * 0.4;
+      } else if (ganWuxing === woSheng) {
+        hurtScore += power * 0.3;
+      }
+    });
+  }
+  
+  const netScore = helpScore - hurtScore;
+  
+  return { helpScore, hurtScore, netScore };
 }
 
 /**
- * 判断旺衰等级
+ * 判断旺衰等级（改进版）
+ * 综合考虑帮扶比例和日干五行数量
  */
-function getWangShuaiLevel(totalScore: number): WangShuaiLevel {
-  if (totalScore >= 35) return '过强';
-  if (totalScore >= 12) return '偏强';
-  if (totalScore >= -12) return '中和';
-  if (totalScore >= -35) return '偏弱';
-  return '过弱';
+function getWangShuaiLevel(
+  helpScore: number, 
+  hurtScore: number,
+  riGanWuxing: WuxingType,
+  wuxingCount: Record<WuxingType, number>
+): WangShuaiLevel {
+  const ratio = helpScore / (hurtScore + 0.1); // 避免除零
+  const riGanCount = wuxingCount[riGanWuxing];
+  const totalCount = Object.values(wuxingCount).reduce((a, b) => a + b, 0);
+  const riGanRatio = riGanCount / totalCount;
+  
+  // 综合判断：同时考虑帮扶比例和日干五行占比
+  // 如果日干五行数量>=4，或占比>=50%，则认为偏强
+  if (riGanCount >= 4 || riGanRatio >= 0.5) {
+    if (ratio >= 1.5) return '过强';
+    return '偏强';
+  }
+  
+  // 如果日干五行数量<=1，或占比<=12.5%，则认为偏弱
+  if (riGanCount <= 1 || riGanRatio <= 0.125) {
+    if (ratio <= 0.6) return '过弱';
+    return '偏弱';
+  }
+  
+  // 标准判断
+  if (ratio >= 1.8) return '过强';
+  if (ratio >= 1.2) return '偏强';
+  if (ratio <= 0.5) return '过弱';
+  if (ratio <= 0.8) return '偏弱';
+  return '中和';
 }
 
 /**
  * 判断身旺身弱
  */
-function getShenWangShuai(deDi: number, deShi: number): ShenWangShuai {
-  const shenScore = deDi + deShi;
-  if (shenScore >= 15) return '身旺';
-  if (shenScore <= -8) return '身弱';
+function getShenWangShuai(helpScore: number, hurtScore: number): ShenWangShuai {
+  const ratio = helpScore / (hurtScore + 0.1);
+  if (ratio >= 1.3) return '身旺';
+  if (ratio <= 0.7) return '身弱';
   return '中和';
 }
 
 /**
- * 确定用神和喜神（核心算法优化）
- * 基于五行力量平衡原则
+ * 确定用神和喜神（核心算法）
  */
 function determineYongXiShen(
   riGanWuxing: WuxingType,
-  wuxingStrength: Record<WuxingType, number>,
-  wangShuai: WangShuaiLevel,
-  shenWangShuai: ShenWangShuai
+  wangShuai: WangShuaiLevel
 ): { yongShen: WuxingType; xiShen: WuxingType[] } {
-  const shengWo = WUXING_SHENG_WO[riGanWuxing]; // 印星
-  const keWo = WUXING_KE_WO[riGanWuxing];       // 官杀
-  const woKe = WUXING_KE[riGanWuxing];          // 财星
-  const woSheng = WUXING_SHENG[riGanWuxing];    // 食伤
-  
-  // 找出最强和最弱的五行
-  const sortedWuxing = [...WUXING].sort((a, b) => wuxingStrength[b] - wuxingStrength[a]);
-  const strongestWuxing = sortedWuxing[0];
-  const weakestWuxing = sortedWuxing[sortedWuxing.length - 1];
+  const shengWo = WUXING_SHENG_WO[riGanWuxing]; // 印星（生我）
+  const keWo = WUXING_KE_WO[riGanWuxing];       // 官杀（克我）
+  const woSheng = WUXING_SHENG[riGanWuxing];    // 食伤（我生）
+  const woKe = WUXING_KE[riGanWuxing];          // 财星（我克）
   
   let yongShen: WuxingType;
   let xiShen: WuxingType[] = [];
   
-  // 根据日干旺衰确定用神喜神
   if (wangShuai === '过强' || wangShuai === '偏强') {
-    // 身强需要泄耗克
-    // 日干五行偏强时：
-    // - 泄：日干生的五行（食伤）
-    // - 耗：日干克的五行（财星）
-    // - 克：克日干的五行（官杀）
-    const xieWo = WUXING_SHENG[riGanWuxing];  // 日干生的（食伤泄身）
-    const haoWo = WUXING_KE[riGanWuxing];     // 日干克的（财星耗身）
-    const keWoWuxing = WUXING_KE_WO[riGanWuxing]; // 克日干的（官杀克身）
-    
-    // 用神优先用泄身的五行（食伤）
-    yongShen = xieWo;
-    // 喜神包括耗身的五行（财星）和克身的五行（官杀）
-    xiShen = [haoWo];
-    
-    // 如果官杀不等于用神和已有喜神，也加入喜神
-    if (keWoWuxing !== yongShen && keWoWuxing !== haoWo) {
-      xiShen.push(keWoWuxing);
-    }
+    // 身强：需要泄耗克来平衡
+    // 用神：食伤泄身（我生）
+    // 喜神：财星耗身（我克）+ 官杀克身（克我）
+    yongShen = woSheng;  // 食伤泄身
+    xiShen = [woKe, keWo]; // 财星耗身、官杀克身
   } else if (wangShuai === '过弱' || wangShuai === '偏弱') {
-    // 身弱需要生扶
-    // 优先用印星生身，其次比劫帮身
-    if (wuxingStrength[shengWo] < wuxingStrength[keWo]) {
-      yongShen = shengWo; // 印星生身
-      xiShen = [riGanWuxing]; // 比劫帮身
-    } else {
-      yongShen = riGanWuxing; // 比劫帮身
-      xiShen = [shengWo]; // 印星生身
-    }
+    // 身弱：需要生扶来帮助
+    // 用神：印星生身（生我）
+    // 喜神：比劫帮身（同我）
+    yongShen = shengWo;  // 印星生身
+    xiShen = [riGanWuxing]; // 比劫帮身
   } else {
-    // 中和状态，根据五行平衡调整
-    // 补最弱的五行
-    yongShen = weakestWuxing;
-    // 喜神为生用神的五行
-    xiShen = [WUXING_SHENG_WO[weakestWuxing]];
+    // 中和：根据五行平衡，适当生扶
+    yongShen = shengWo;
+    xiShen = [riGanWuxing];
   }
   
   // 确保喜神不重复且不等于用神
   xiShen = xiShen.filter(x => x !== yongShen);
-  if (xiShen.length === 0) {
-    // 如果喜神为空，添加一个合理的喜神
-    if (wangShuai === '过强' || wangShuai === '偏强') {
-      xiShen = [woKe !== yongShen ? woKe : woSheng];
-    } else {
-      xiShen = [shengWo !== yongShen ? shengWo : riGanWuxing];
-    }
-  }
   
   return { yongShen, xiShen };
 }
@@ -437,7 +420,7 @@ function generateSimpleText(result: {
   yongShen: WuxingType;
   xiShen: WuxingType[];
 }): string {
-  const { riGanWuxing, wangShuai, shenWangShuai, yongShen, xiShen } = result;
+  const { riGanWuxing, wangShuai, yongShen, xiShen } = result;
   
   let wangShuaiDesc = '';
   switch (wangShuai) {
@@ -448,29 +431,18 @@ function generateSimpleText(result: {
     case '过弱': wangShuaiDesc = '偏弱'; break;
   }
   
-  const shenDesc = shenWangShuai === '身旺' ? '身旺' : (shenWangShuai === '身弱' ? '身衰' : '身平');
-  const xiShenText = xiShen.join('、');
+  // 组合喜用神文案
+  const allXiYong = [yongShen, ...xiShen].filter((v, i, a) => a.indexOf(v) === i);
+  const xiYongText = allXiYong.join('');
   
   let text = `日干为${riGanWuxing}，即五行属${riGanWuxing}，俗称的${riGanWuxing}命`;
   
   if (wangShuai === '中和') {
-    text += `，从你的五行来看你的【${riGanWuxing}】五行力量${wangShuaiDesc}，`;
-    text += `可以用【用神：${yongShen}】来维持平衡，`;
-    text += `同时你五行属${riGanWuxing}${shenDesc}，也可以用【喜神：${xiShenText}】来调和，这样会更顺利。`;
+    text += `，从你的五行来看你的【${riGanWuxing}】五行力量${wangShuaiDesc}，可以用【喜用神：${xiYongText}】来平衡，这样会更顺利。`;
   } else if (wangShuai === '过强' || wangShuai === '偏强') {
-    text += `，但是从你的五行来看你的【${riGanWuxing}】五行力量${wangShuaiDesc}，要用【用神：${yongShen}】来平衡，`;
-    if (shenWangShuai === '身旺') {
-      text += `同时你五行属${riGanWuxing}${shenDesc}，需要用【喜神：${xiShenText}】来平衡，这样会更顺利。`;
-    } else {
-      text += `同时你五行属${riGanWuxing}${shenDesc}，需要用【喜神：${xiShenText}】来帮扶，这样会更顺利。`;
-    }
+    text += `，从你的五行来看你的【${riGanWuxing}】五行力量${wangShuaiDesc}，要用【喜用神：${xiYongText}】来平衡，这样会更顺利。`;
   } else {
-    text += `，从你的五行来看你的【${riGanWuxing}】五行力量${wangShuaiDesc}，要用【用神：${yongShen}】来帮扶，`;
-    if (shenWangShuai === '身旺') {
-      text += `同时你五行属${riGanWuxing}${shenDesc}，也是需要用【喜神：${xiShenText}】来平衡，这样会更顺利。`;
-    } else {
-      text += `同时你五行属${riGanWuxing}${shenDesc}，需要用【喜神：${xiShenText}】来帮扶，这样会更顺利。`;
-    }
+    text += `，从你的五行来看你的【${riGanWuxing}】五行力量${wangShuaiDesc}，要用【喜用神：${xiYongText}】来帮扶，这样会更顺利。`;
   }
   
   return text;
@@ -524,7 +496,6 @@ export function analyzeBazi(paipanResult: any): BaziAnalysisResult {
   
   const riGan = tianGan[2];
   const riGanWuxing = TIANGAN_WUXING[riGan];
-  const yueZhi = diZhi[1];
   
   // 计算五行数量
   const wuxingCount: Record<WuxingType, number> = {
@@ -543,19 +514,18 @@ export function analyzeBazi(paipanResult: any): BaziAnalysisResult {
     wuxingCount[wx]++;
   }
   
-  // 计算五行力量（考虑藏干）
-  const wuxingStrength = calculateWuxingStrength(tianGan, diZhi, yueZhi);
+  // 计算五行力量
+  const wuxingStrength = calculateWuxingStrength(tianGan, diZhi);
   
-  // 计算旺衰
-  const deLing = calculateDeLing(riGanWuxing, yueZhi);
-  const deDi = calculateDeDi(riGanWuxing, diZhi);
-  const deShi = calculateDeShi(riGanWuxing, tianGan);
-  const totalScore = deLing + deDi + deShi;
-  const wangShuai = getWangShuaiLevel(totalScore);
-  const shenWangShuai = getShenWangShuai(deDi, deShi);
+  // 计算日干实际力量
+  const { helpScore, hurtScore, netScore } = calculateRiGanStrength(riGanWuxing, tianGan, diZhi);
   
-  // 确定用神喜神忌神（使用优化后的算法）
-  const { yongShen, xiShen } = determineYongXiShen(riGanWuxing, wuxingStrength, wangShuai, shenWangShuai);
+  // 判断旺衰
+  const wangShuai = getWangShuaiLevel(helpScore, hurtScore, riGanWuxing, wuxingCount);
+  const shenWangShuai = getShenWangShuai(helpScore, hurtScore);
+  
+  // 确定用神喜神忌神
+  const { yongShen, xiShen } = determineYongXiShen(riGanWuxing, wangShuai);
   const jiShen = determineJiShen(riGanWuxing, wangShuai);
   
   const partialResult = {
@@ -566,10 +536,10 @@ export function analyzeBazi(paipanResult: any): BaziAnalysisResult {
     riGanWuxing,
     wuxingCount,
     wuxingStrength,
-    deLing,
-    deDi,
-    deShi,
-    totalScore,
+    deLing: helpScore,
+    deDi: hurtScore,
+    deShi: netScore,
+    totalScore: netScore,
     wangShuai,
     shenWangShuai,
     yongShen,
