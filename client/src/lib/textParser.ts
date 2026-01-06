@@ -109,23 +109,94 @@ function cnNumToArabic(cnNum: string): number {
  */
 function preprocess(text: string): string {
   return text
-    .replace(/\s+/g, ' ')
     .replace(/[，。、；：""''【】（）]/g, ' ')
     .replace(/出生日期|出生时间|生日|生于|出生于|生辰|时辰/g, ' ')
-    .replace(/公历|阳历|新历/g, '')
     .trim();
+}
+
+/**
+ * 解析紧凑日期格式 如 19900510, 1995510, 19780307
+ * 以及空格分隔格式如 1978 03 07
+ */
+function parseCompactDate(text: string): { year?: number; month?: number; day?: number; remaining: string } {
+  // 空格分隔格式: YYYY MM DD 或 YYYY M D (如 1978 03 07 或 1978 3 7)
+  let match = text.match(/(?:^|\D)((?:19|20)\d{2})\s+(0?[1-9]|1[0-2])\s+(0?[1-9]|[12]\d|3[01])(?:\D|$)/);
+  if (match) {
+    return {
+      year: parseInt(match[1]),
+      month: parseInt(match[2]),
+      day: parseInt(match[3]),
+      remaining: text.replace(match[0], ' ')
+    };
+  }
+  
+  // 8位格式: YYYYMMDD (如 19900510)
+  match = text.match(/(?:^|\D)((?:19|20)\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?:\D|$)/);
+  if (match) {
+    return {
+      year: parseInt(match[1]),
+      month: parseInt(match[2]),
+      day: parseInt(match[3]),
+      remaining: text.replace(match[0], ' ')
+    };
+  }
+  
+  // 7位格式: YYYYMDD 或 YYYYMMD (如 1995510 = 1995年5月10日)
+  match = text.match(/(?:^|\D)((?:19|20)\d{2})([1-9])(0[1-9]|[12]\d|3[01])(?:\D|$)/);
+  if (match) {
+    return {
+      year: parseInt(match[1]),
+      month: parseInt(match[2]),
+      day: parseInt(match[3]),
+      remaining: text.replace(match[0], ' ')
+    };
+  }
+  
+  // 另一种7位格式: YYYYMMD (如 1995101 = 1995年10月1日)
+  match = text.match(/(?:^|\D)((?:19|20)\d{2})(0[1-9]|1[0-2])([1-9])(?:\D|$)/);
+  if (match) {
+    return {
+      year: parseInt(match[1]),
+      month: parseInt(match[2]),
+      day: parseInt(match[3]),
+      remaining: text.replace(match[0], ' ')
+    };
+  }
+  
+  // 6位格式: YYYYMD (如 199551 = 1995年5月1日 或 199515 = 1995年1月5日)
+  // 优先解析为 YYYYMD (月份1-9，日期1-9)
+  match = text.match(/(?:^|\D)((?:19|20)\d{2})([1-9])([1-9])(?:\D|$)/);
+  if (match) {
+    return {
+      year: parseInt(match[1]),
+      month: parseInt(match[2]),
+      day: parseInt(match[3]),
+      remaining: text.replace(match[0], ' ')
+    };
+  }
+  
+  return { remaining: text };
 }
 
 /**
  * 解析年份
  */
 function parseYear(text: string): { year?: number; remaining: string } {
-  // 4位年份
-  let match = text.match(/(?:^|\D)((?:19|20)\d{2})(?:年|\s|\/|-|\.|\D|$)/);
+  // 4位年份 带分隔符
+  let match = text.match(/(?:^|\D)((?:19|20)\d{2})(?:年|\/|-|\.|\s)/);
   if (match) {
     return {
       year: parseInt(match[1]),
       remaining: text.replace(match[1], ' ').replace(/年/, ' ')
+    };
+  }
+  
+  // 4位年份 在开头
+  match = text.match(/^((?:19|20)\d{2})(?:\D|$)/);
+  if (match) {
+    return {
+      year: parseInt(match[1]),
+      remaining: text.replace(match[1], ' ')
     };
   }
   
@@ -147,8 +218,8 @@ function parseYear(text: string): { year?: number; remaining: string } {
  * 解析月份
  */
 function parseMonth(text: string): { month?: number; remaining: string } {
-  // 数字月份
-  let match = text.match(/(?:^|\D)(0?[1-9]|1[0-2])(?:月|\s|\/|-|\.)/);
+  // 数字月份 带分隔符
+  let match = text.match(/(?:^|\D)(0?[1-9]|1[0-2])(?:月|\/|-|\.)/);
   if (match) {
     return {
       month: parseInt(match[1]),
@@ -232,26 +303,37 @@ function parseTime(text: string): { hour?: number; minute?: number; remaining: s
     };
   }
   
-  // 24小时制 HH:MM 或 HH时MM分
-  let match = text.match(/(\d{1,2})[:：时](\d{1,2})(?:分)?/);
+  // 24小时制 HH:MM 或 HH.MM 或 HH时MM分
+  let match = text.match(/(\d{1,2})[:：\.时](\d{1,2})(?:分)?/);
   if (match) {
+    let hour = parseInt(match[1]);
+    const minute = parseInt(match[2]);
+    
+    // 检查上午/下午/晚上
+    if (/下午|晚上|晚|夜|pm/i.test(text)) {
+      if (hour < 12) hour += 12;
+    }
+    if (/上午|早上|早|am/i.test(text) && hour === 12) {
+      hour = 0;
+    }
+    
     return {
-      hour: parseInt(match[1]),
-      minute: parseInt(match[2]),
+      hour,
+      minute,
       remaining: text.replace(match[0], ' ')
     };
   }
   
-  // 只有小时
+  // 只有小时 (X时/X点)
   match = text.match(/(\d{1,2})(?:时|点)/);
   if (match) {
     let hour = parseInt(match[1]);
     
-    // 检查上午/下午
-    if (text.includes('下午') || text.includes('晚上') || text.toLowerCase().includes('pm')) {
+    // 检查上午/下午/晚上
+    if (/下午|晚上|晚|夜|pm/i.test(text)) {
       if (hour < 12) hour += 12;
     }
-    if ((text.includes('上午') || text.toLowerCase().includes('am')) && hour === 12) {
+    if (/上午|早上|早|am/i.test(text) && hour === 12) {
       hour = 0;
     }
     
@@ -265,8 +347,35 @@ function parseTime(text: string): { hour?: number; minute?: number; remaining: s
     };
   }
   
+  // 口语化时间：上午/下午/晚上 + 数字
+  match = text.match(/(上午|早上|早|下午|晚上|晚|夜)\s*(\d{1,2})(?:点|时)?(?:(\d{1,2})分?|半)?/);
+  if (match) {
+    let hour = parseInt(match[2]);
+    const period = match[1];
+    
+    if (/下午|晚上|晚|夜/.test(period)) {
+      if (hour < 12) hour += 12;
+    }
+    if (/上午|早上|早/.test(period) && hour === 12) {
+      hour = 0;
+    }
+    
+    let minute = 0;
+    if (match[3]) {
+      minute = parseInt(match[3]);
+    } else if (text.includes('半')) {
+      minute = 30;
+    }
+    
+    return {
+      hour,
+      minute,
+      remaining: text.replace(match[0], ' ')
+    };
+  }
+  
   // 12小时制 with AM/PM
-  match = text.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)/i);
+  match = text.match(/(\d{1,2})(?:[:.](d{2}))?\s*(am|pm|AM|PM)/i);
   if (match) {
     let hour = parseInt(match[1]);
     const minute = match[2] ? parseInt(match[2]) : 0;
@@ -282,6 +391,23 @@ function parseTime(text: string): { hour?: number; minute?: number; remaining: s
     };
   }
   
+  // 只有时间段词汇，没有具体时间，设置默认值
+  // 检查是否有明确的时间数字（如 10:30, 10时, 10点）
+  const hasExplicitTime = /\d{1,2}[:.时点]\d{0,2}/.test(text) || /\d{1,2}[:.时点]/.test(text);
+  
+  // 如果没有明确时间，检查时间段词汇
+  if (!hasExplicitTime) {
+    if (/晚上|晚|夜里|夜晚|夜间/.test(text)) {
+      return { hour: 20, minute: 0, remaining: text };
+    }
+    if (/下午/.test(text)) {
+      return { hour: 15, minute: 0, remaining: text };
+    }
+    if (/上午|早上|早/.test(text)) {
+      return { hour: 9, minute: 0, remaining: text };
+    }
+  }
+  
   return { remaining: text };
 }
 
@@ -289,10 +415,12 @@ function parseTime(text: string): { hour?: number; minute?: number; remaining: s
  * 解析性别
  */
 function parseGender(text: string): { gender?: 'male' | 'female'; remaining: string } {
-  if (/男|乾|male|man|boy/i.test(text)) {
+  // 男性关键词
+  if (/男(?:性|生|孩|士|的)?|乾造?|male|man|boy|先生/i.test(text)) {
     return { gender: 'male', remaining: text };
   }
-  if (/女|坤|female|woman|girl/i.test(text)) {
+  // 女性关键词
+  if (/女(?:性|生|孩|士|的)?|坤造?|female|woman|girl|小姐|女士/i.test(text)) {
     return { gender: 'female', remaining: text };
   }
   return { remaining: text };
@@ -302,12 +430,24 @@ function parseGender(text: string): { gender?: 'male' | 'female'; remaining: str
  * 解析地区
  */
 function parseLocation(text: string): { location?: string; remaining: string } {
-  // 常见城市
+  // 常见城市（优先匹配）
   const cities = [
     '北京', '上海', '广州', '深圳', '天津', '重庆', '成都', '杭州', '武汉', '南京',
     '西安', '苏州', '郑州', '长沙', '青岛', '沈阳', '大连', '厦门', '福州', '济南',
     '哈尔滨', '长春', '昆明', '贵阳', '南宁', '海口', '石家庄', '太原', '呼和浩特',
-    '乌鲁木齐', '兰州', '西宁', '银川', '拉萨', '合肥', '南昌', '香港', '澳门', '台北'
+    '乌鲁木齐', '兰州', '西宁', '银川', '拉萨', '合肥', '南昌', '香港', '澳门', '台北',
+    '徐州', '无锡', '常州', '宁波', '温州', '嘉兴', '绍兴', '金华', '台州', '湖州',
+    '珠海', '佛山', '东莞', '中山', '惠州', '汕头', '潮州', '揭阳', '湛江', '茂名',
+    '烟台', '威海', '潍坊', '临沂', '淄博', '泰安', '日照', '德州', '聊城', '滨州',
+    '洛阳', '开封', '新乡', '安阳', '焦作', '濮阳', '许昌', '漯河', '三门峡', '南阳',
+    '株洲', '湘潭', '衡阳', '邵阳', '岳阳', '常德', '张家界', '益阳', '郴州', '永州',
+    '三亚', '海口', '吐鲁番', '喀什', '库尔勒', '克拉玛依', '伊犁', '阿克苏',
+    // 海外城市
+    '都柏林', '伦敦', '巴黎', '纽约', '洛杉矶', '旧金山', '芝加哥', '西雅图', '波士顿',
+    '多伦多', '温哥华', '蒙特利尔', '悉尼', '墨尔本', '奥克兰', '新加坡', '东京', '大阪',
+    '首尔', '曼谷', '吉隆坡', '雅加达', '马尼拉', '河内', '胡志明', '迪拜', '阿布扎比',
+    '柏林', '慕尼黑', '法兰克福', '阿姆斯特丹', '布鲁塞尔', '苏黎世', '日内瓦', '维也纳',
+    '米兰', '罗马', '马德里', '巴塞罗那', '里斯本', '莫斯科', '圣彼得堡'
   ];
   
   for (const city of cities) {
@@ -316,9 +456,37 @@ function parseLocation(text: string): { location?: string; remaining: string } {
     }
   }
   
+  // 省份映射到省会城市
+  const provinceMap: Record<string, string> = {
+    '河北': '石家庄', '山西': '太原', '辽宁': '沈阳', '吉林': '长春', '黑龙江': '哈尔滨',
+    '江苏': '南京', '浙江': '杭州', '安徽': '合肥', '福建': '福州', '江西': '南昌',
+    '山东': '济南', '河南': '郑州', '湖北': '武汉', '湖南': '长沙', '广东': '广州',
+    '海南': '海口', '四川': '成都', '贵州': '贵阳', '云南': '昆明', '陕西': '西安',
+    '甘肃': '兰州', '青海': '西宁', '台湾': '台北', '内蒙古': '呼和浩特', '广西': '南宁',
+    '西藏': '拉萨', '宁夏': '银川', '新疆': '乌鲁木齐',
+    // 海外国家
+    '爱尔兰': '都柏林', '英国': '伦敦', '法国': '巴黎', '德国': '柏林', '意大利': '罗马',
+    '西班牙': '马德里', '葡萄牙': '里斯本', '荷兰': '阿姆斯特丹', '比利时': '布鲁塞尔',
+    '瑞士': '苏黎世', '奥地利': '维也纳', '俄罗斯': '莫斯科', '美国': '纽约', '加拿大': '多伦多',
+    '澳大利亚': '悉尼', '新西兰': '奥克兰', '日本': '东京', '韩国': '首尔', '泰国': '曼谷',
+    '马来西亚': '吉隆坡', '印尼': '雅加达', '菲律宾': '马尼拉', '越南': '河内',
+    '阿联酋': '迪拜', '新加坡': '新加坡'
+  };
+  
+  for (const [province, capital] of Object.entries(provinceMap)) {
+    if (text.includes(province)) {
+      return { location: capital, remaining: text };
+    }
+  }
+  
   // 匹配省市区格式
   const match = text.match(/([^\s]+(?:省|市|区|县|镇))/);
   if (match) {
+    // 提取市名
+    const cityMatch = match[1].match(/(.+?)(?:省|市|区|县|镇)/);
+    if (cityMatch) {
+      return { location: cityMatch[1], remaining: text };
+    }
     return { location: match[1], remaining: text };
   }
   
@@ -343,34 +511,55 @@ export function parseBirthInfo(text: string): ParsedBirthInfo {
   // 检测农历
   const isLunar = detectLunar(text);
   
-  // 解析各部分
-  const yearResult = parseYear(processedText);
-  processedText = yearResult.remaining;
+  // 首先尝试解析紧凑日期格式 (如 19900510, 1995510)
+  const compactResult = parseCompactDate(processedText);
   
-  const monthResult = parseMonth(processedText);
-  processedText = monthResult.remaining;
+  let year: number | undefined;
+  let month: number | undefined;
+  let day: number | undefined;
   
-  const dayResult = parseDay(processedText);
-  processedText = dayResult.remaining;
+  if (compactResult.year && compactResult.month && compactResult.day) {
+    year = compactResult.year;
+    month = compactResult.month;
+    day = compactResult.day;
+    processedText = compactResult.remaining;
+  } else {
+    // 解析标准格式
+    const yearResult = parseYear(processedText);
+    processedText = yearResult.remaining;
+    year = yearResult.year;
+    
+    const monthResult = parseMonth(processedText);
+    processedText = monthResult.remaining;
+    month = monthResult.month;
+    
+    const dayResult = parseDay(processedText);
+    processedText = dayResult.remaining;
+    day = dayResult.day;
+  }
   
-  const timeResult = parseTime(processedText);
+  // 解析时间（使用原始文本检测时间段词汇）
+  const timeResult = parseTime(rawText);
   processedText = timeResult.remaining;
   
+  // 解析性别
   const genderResult = parseGender(processedText);
+  
+  // 解析地区
   const locationResult = parseLocation(processedText);
   
   // 计算置信度
-  if (yearResult.year) confidence += 25;
-  if (monthResult.month) confidence += 25;
-  if (dayResult.day) confidence += 25;
+  if (year) confidence += 25;
+  if (month) confidence += 25;
+  if (day) confidence += 25;
   if (timeResult.hour !== undefined) confidence += 15;
   if (genderResult.gender) confidence += 5;
   if (locationResult.location) confidence += 5;
   
   return {
-    year: yearResult.year,
-    month: monthResult.month,
-    day: dayResult.day,
+    year,
+    month,
+    day,
     hour: timeResult.hour,
     minute: timeResult.minute ?? 0,
     gender: genderResult.gender,

@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { Copy, Sparkles, RotateCcw } from 'lucide-react';
-import { parseBirthInfo, type ParsedBirthInfo } from '@/lib/textParser';
+import { parseBirthInfo } from '@/lib/textParser';
 import { fatemaps, lunarToSolar } from '@/lib/paipanWrapper';
 import { analyzeBazi, formatResultForCopy, WUXING_CLASS, type BaziAnalysisResult } from '@/lib/baziAnalyzer';
 import { CITIES, findCity, DEFAULT_CITY, type CityInfo } from '@/lib/cityData';
@@ -23,13 +23,13 @@ export default function Home() {
   // 智能输入文本
   const [smartInput, setSmartInput] = useState('');
   
-  // 表单数据
+  // 表单数据 - 默认性别为女
   const [year, setYear] = useState<number>(1990);
   const [month, setMonth] = useState<number>(1);
   const [day, setDay] = useState<number>(1);
   const [hour, setHour] = useState<number>(12);
   const [minute, setMinute] = useState<number>(0);
-  const [gender, setGender] = useState<'male' | 'female'>('male');
+  const [gender, setGender] = useState<'male' | 'female'>('female');
   const [city, setCity] = useState<CityInfo>(DEFAULT_CITY);
   const [isLunar, setIsLunar] = useState(false);
   
@@ -52,9 +52,23 @@ export default function Home() {
     if (parsed.year) setYear(parsed.year);
     if (parsed.month) setMonth(parsed.month);
     if (parsed.day) setDay(parsed.day);
-    if (parsed.hour !== undefined) setHour(parsed.hour);
-    if (parsed.minute !== undefined) setMinute(parsed.minute);
-    if (parsed.gender) setGender(parsed.gender);
+    
+    // 如果没有解析到时间，默认为12:00
+    if (parsed.hour !== undefined) {
+      setHour(parsed.hour);
+      if (parsed.minute !== undefined) setMinute(parsed.minute);
+    } else {
+      setHour(12);
+      setMinute(0);
+    }
+    
+    // 性别：如果没有解析到，默认为女
+    if (parsed.gender) {
+      setGender(parsed.gender);
+    } else {
+      setGender('female');
+    }
+    
     if (parsed.isLunar) setIsLunar(parsed.isLunar);
     
     if (parsed.location) {
@@ -146,6 +160,17 @@ export default function Home() {
     });
   }, [result, gender, year, month, day, hour, minute, isLunar]);
 
+  // 复制颜色建议
+  const handleCopyColorAdvice = useCallback(() => {
+    if (!result) return;
+    
+    navigator.clipboard.writeText(result.colorAdvice).then(() => {
+      toast.success('颜色建议已复制');
+    }).catch(() => {
+      toast.error('复制失败');
+    });
+  }, [result]);
+
   // 重置
   const handleReset = useCallback(() => {
     setSmartInput('');
@@ -154,7 +179,7 @@ export default function Home() {
     setDay(1);
     setHour(12);
     setMinute(0);
-    setGender('male');
+    setGender('female');
     setCity(DEFAULT_CITY);
     setIsLunar(false);
     setParseConfidence(0);
@@ -205,7 +230,7 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Textarea
-                    placeholder="请粘贴生辰信息，支持多种格式：&#10;• 1990年5月15日 10时30分 北京 男&#10;• 1990/5/15 10:30 北京&#10;• 90年5月15号上午10点半&#10;• 农历1990年四月廿一 巳时"
+                    placeholder="请粘贴生辰信息，支持多种格式：&#10;• 1990年5月15日 10时30分 北京 女&#10;• 19900515 10:30 北京&#10;• 1990/5/15 上午10点半 海南&#10;• 农历1990年四月廿一 巳时"
                     value={smartInput}
                     onChange={(e) => setSmartInput(e.target.value)}
                     className="min-h-[120px] bg-background/50 resize-none"
@@ -367,7 +392,7 @@ export default function Home() {
                         <SelectContent className="max-h-[300px]">
                           {CITIES.map((c) => (
                             <SelectItem key={c.name} value={c.name}>
-                              {c.name}
+                              {c.name}（{c.province}）
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -395,6 +420,22 @@ export default function Home() {
                       重置
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* 五行相生相克图 */}
+              <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg" style={{ fontFamily: 'var(--font-serif)' }}>
+                    五行相生相克
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex justify-center">
+                  <img 
+                    src="/images/wuxing-cycle.png" 
+                    alt="五行相生相克图" 
+                    className="max-w-[280px] w-full"
+                  />
                 </CardContent>
               </Card>
             </div>
@@ -463,7 +504,7 @@ export default function Home() {
                         className="btn-seal"
                       >
                         <Copy className="w-4 h-4 mr-2" />
-                        复制结果
+                        复制全部
                       </Button>
                     </CardHeader>
                     <CardContent>
@@ -515,6 +556,26 @@ export default function Home() {
                         <div className="bg-accent/5 rounded-lg p-4 border border-accent/20">
                           <p className="text-sm leading-relaxed">
                             {result.simpleText}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 颜色推荐（调候建议） */}
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">颜色推荐</span>
+                          <Button
+                            onClick={handleCopyColorAdvice}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            <Copy className="w-3 h-3 mr-1" />
+                            复制
+                          </Button>
+                        </div>
+                        <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
+                          <p className="text-sm leading-relaxed">
+                            {result.colorAdvice}
                           </p>
                         </div>
                       </div>

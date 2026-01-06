@@ -34,6 +34,15 @@ export const WUXING_CLASS: Record<WuxingType, string> = {
   '土': 'wuxing-earth',
 };
 
+// 五行对应颜色描述（用于推荐）
+export const WUXING_COLOR_DESC: Record<WuxingType, string> = {
+  '金': '白色、金色、银色系',
+  '水': '蓝色系、黑色系',
+  '木': '绿色系、青色系',
+  '火': '红色系、紫色系、粉色系',
+  '土': '黄色系、棕色系、咖色系',
+};
+
 // 天干
 export const TIANGAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'] as const;
 
@@ -56,6 +65,22 @@ export const DIZHI_WUXING: Record<string, WuxingType> = {
   '巳': '火', '午': '火',
   '辰': '土', '戌': '土', '丑': '土', '未': '土',
   '申': '金', '酉': '金',
+};
+
+// 地支藏干（用于更精确的五行力量计算）
+export const DIZHI_CANGGAN: Record<string, string[]> = {
+  '子': ['癸'],
+  '丑': ['己', '癸', '辛'],
+  '寅': ['甲', '丙', '戊'],
+  '卯': ['乙'],
+  '辰': ['戊', '乙', '癸'],
+  '巳': ['丙', '庚', '戊'],
+  '午': ['丁', '己'],
+  '未': ['己', '丁', '乙'],
+  '申': ['庚', '壬', '戊'],
+  '酉': ['辛'],
+  '戌': ['戊', '辛', '丁'],
+  '亥': ['壬', '甲'],
 };
 
 // 五行生克关系
@@ -93,25 +118,25 @@ export const WUXING_KE_WO: Record<WuxingType, WuxingType> = {
   '土': '木',
 };
 
-// 月令旺相休囚死
+// 月令旺相休囚死（调整权重）
 export const YUELING_WANGXIANG: Record<string, Record<WuxingType, number>> = {
   // 春季（寅卯月）- 木旺
-  '寅': { '木': 3, '火': 2, '土': -1, '金': -2, '水': 1 },
-  '卯': { '木': 3, '火': 2, '土': -1, '金': -2, '水': 1 },
+  '寅': { '木': 4, '火': 2, '土': -2, '金': -3, '水': 1 },
+  '卯': { '木': 4, '火': 2, '土': -2, '金': -3, '水': 1 },
   // 夏季（巳午月）- 火旺
-  '巳': { '火': 3, '土': 2, '金': -1, '水': -2, '木': 1 },
-  '午': { '火': 3, '土': 2, '金': -1, '水': -2, '木': 1 },
+  '巳': { '火': 4, '土': 2, '金': -2, '水': -3, '木': 1 },
+  '午': { '火': 4, '土': 2, '金': -2, '水': -3, '木': 1 },
   // 秋季（申酉月）- 金旺
-  '申': { '金': 3, '水': 2, '木': -1, '火': -2, '土': 1 },
-  '酉': { '金': 3, '水': 2, '木': -1, '火': -2, '土': 1 },
+  '申': { '金': 4, '水': 2, '木': -2, '火': -3, '土': 1 },
+  '酉': { '金': 4, '水': 2, '木': -2, '火': -3, '土': 1 },
   // 冬季（亥子月）- 水旺
-  '亥': { '水': 3, '木': 2, '火': -1, '土': -2, '金': 1 },
-  '子': { '水': 3, '木': 2, '火': -1, '土': -2, '金': 1 },
+  '亥': { '水': 4, '木': 2, '火': -2, '土': -3, '金': 1 },
+  '子': { '水': 4, '木': 2, '火': -2, '土': -3, '金': 1 },
   // 四季土月（辰戌丑未）- 土旺
-  '辰': { '土': 3, '金': 2, '水': -1, '木': -2, '火': 1 },
-  '戌': { '土': 3, '金': 2, '水': -1, '木': -2, '火': 1 },
-  '丑': { '土': 3, '金': 2, '水': -1, '木': -2, '火': 1 },
-  '未': { '土': 3, '金': 2, '水': -1, '木': -2, '火': 1 },
+  '辰': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
+  '戌': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
+  '丑': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
+  '未': { '土': 4, '金': 2, '水': -2, '木': -3, '火': 1 },
 };
 
 // 旺衰等级
@@ -149,32 +174,93 @@ export interface BaziAnalysisResult {
   // 分析文案
   analysisText: string;      // 详细分析
   simpleText: string;        // 简洁文案（适合发送给顾客）
+  colorAdvice: string;       // 颜色推荐文案
+}
+
+/**
+ * 计算五行力量（考虑藏干）
+ */
+function calculateWuxingStrength(tianGan: string[], diZhi: string[], yueZhi: string): Record<WuxingType, number> {
+  const strength: Record<WuxingType, number> = {
+    '金': 0, '水': 0, '木': 0, '火': 0, '土': 0
+  };
+  
+  // 天干力量（每个天干基础值10）
+  for (const gan of tianGan) {
+    const wx = TIANGAN_WUXING[gan];
+    strength[wx] += 10;
+  }
+  
+  // 地支本气力量（每个地支本气基础值10）
+  for (const zhi of diZhi) {
+    const wx = DIZHI_WUXING[zhi];
+    strength[wx] += 10;
+  }
+  
+  // 地支藏干力量（藏干力量较弱）
+  for (const zhi of diZhi) {
+    const canggan = DIZHI_CANGGAN[zhi];
+    if (canggan) {
+      canggan.forEach((gan, index) => {
+        const wx = TIANGAN_WUXING[gan];
+        // 本气最强，中气次之，余气最弱
+        const power = index === 0 ? 5 : (index === 1 ? 3 : 2);
+        strength[wx] += power;
+      });
+    }
+  }
+  
+  // 月令加成（当令五行力量翻倍）
+  const wangxiang = YUELING_WANGXIANG[yueZhi];
+  if (wangxiang) {
+    for (const wx of WUXING) {
+      if (wangxiang[wx] > 0) {
+        strength[wx] *= (1 + wangxiang[wx] * 0.2);
+      } else if (wangxiang[wx] < 0) {
+        strength[wx] *= (1 + wangxiang[wx] * 0.1);
+      }
+    }
+  }
+  
+  return strength;
 }
 
 /**
  * 计算得令分数
- * 判断日干在月令中的旺衰状态
  */
 function calculateDeLing(riGanWuxing: WuxingType, yueZhi: string): number {
   const wangxiang = YUELING_WANGXIANG[yueZhi];
   if (!wangxiang) return 0;
-  return wangxiang[riGanWuxing] * 10;
+  return wangxiang[riGanWuxing] * 8;
 }
 
 /**
  * 计算得地分数
- * 判断日干在地支中的根气
  */
 function calculateDeDi(riGanWuxing: WuxingType, diZhi: string[]): number {
   let score = 0;
   const shengWo = WUXING_SHENG_WO[riGanWuxing];
   
   for (const zhi of diZhi) {
+    // 本气
     const zhiWuxing = DIZHI_WUXING[zhi];
     if (zhiWuxing === riGanWuxing) {
-      score += 8; // 比肩
+      score += 10;
     } else if (zhiWuxing === shengWo) {
-      score += 6; // 印星
+      score += 6;
+    }
+    
+    // 藏干
+    const canggan = DIZHI_CANGGAN[zhi];
+    if (canggan) {
+      for (const gan of canggan) {
+        const ganWuxing = TIANGAN_WUXING[gan];
+        if (ganWuxing === riGanWuxing) {
+          score += 3;
+        } else if (ganWuxing === shengWo) {
+          score += 2;
+        }
+      }
     }
   }
   
@@ -183,24 +269,28 @@ function calculateDeDi(riGanWuxing: WuxingType, diZhi: string[]): number {
 
 /**
  * 计算得势分数
- * 判断天干中生助日干的力量
  */
 function calculateDeShi(riGanWuxing: WuxingType, tianGan: string[], riGanIndex: number = 2): number {
   let score = 0;
   const shengWo = WUXING_SHENG_WO[riGanWuxing];
+  const keWo = WUXING_KE_WO[riGanWuxing];
+  const woKe = WUXING_KE[riGanWuxing];
+  const woSheng = WUXING_SHENG[riGanWuxing];
   
   for (let i = 0; i < tianGan.length; i++) {
-    if (i === riGanIndex) continue; // 跳过日干本身
+    if (i === riGanIndex) continue;
     
     const ganWuxing = TIANGAN_WUXING[tianGan[i]];
     if (ganWuxing === riGanWuxing) {
-      score += 6; // 比肩劫财
+      score += 8; // 比肩劫财
     } else if (ganWuxing === shengWo) {
-      score += 4; // 印星
-    } else if (ganWuxing === WUXING_KE_WO[riGanWuxing]) {
-      score -= 4; // 官杀
-    } else if (WUXING_KE[riGanWuxing] === ganWuxing) {
-      score -= 2; // 财星泄气
+      score += 6; // 印星
+    } else if (ganWuxing === keWo) {
+      score -= 6; // 官杀
+    } else if (ganWuxing === woKe) {
+      score -= 4; // 财星耗身
+    } else if (ganWuxing === woSheng) {
+      score -= 2; // 食伤泄气
     }
   }
   
@@ -208,13 +298,13 @@ function calculateDeShi(riGanWuxing: WuxingType, tianGan: string[], riGanIndex: 
 }
 
 /**
- * 判断旺衰等级（五行力量）
+ * 判断旺衰等级
  */
 function getWangShuaiLevel(totalScore: number): WangShuaiLevel {
-  if (totalScore >= 40) return '过强';
-  if (totalScore >= 15) return '偏强';
-  if (totalScore >= -15) return '中和';
-  if (totalScore >= -40) return '偏弱';
+  if (totalScore >= 35) return '过强';
+  if (totalScore >= 12) return '偏强';
+  if (totalScore >= -12) return '中和';
+  if (totalScore >= -35) return '偏弱';
   return '过弱';
 }
 
@@ -223,60 +313,84 @@ function getWangShuaiLevel(totalScore: number): WangShuaiLevel {
  */
 function getShenWangShuai(deDi: number, deShi: number): ShenWangShuai {
   const shenScore = deDi + deShi;
-  if (shenScore >= 10) return '身旺';
-  if (shenScore <= -5) return '身弱';
+  if (shenScore >= 15) return '身旺';
+  if (shenScore <= -8) return '身弱';
   return '中和';
 }
 
 /**
- * 确定用神
+ * 确定用神和喜神（核心算法优化）
+ * 基于五行力量平衡原则
  */
-function determineYongShen(riGanWuxing: WuxingType, wangShuai: WangShuaiLevel): WuxingType {
-  const keWo = WUXING_KE_WO[riGanWuxing];  // 克我者（官杀）
-  const woKe = WUXING_KE[riGanWuxing];      // 我克者（财星）
-  const shengWo = WUXING_SHENG_WO[riGanWuxing]; // 生我者（印星）
-  const woSheng = WUXING_SHENG[riGanWuxing];    // 我生者（食伤）
+function determineYongXiShen(
+  riGanWuxing: WuxingType,
+  wuxingStrength: Record<WuxingType, number>,
+  wangShuai: WangShuaiLevel,
+  shenWangShuai: ShenWangShuai
+): { yongShen: WuxingType; xiShen: WuxingType[] } {
+  const shengWo = WUXING_SHENG_WO[riGanWuxing]; // 印星
+  const keWo = WUXING_KE_WO[riGanWuxing];       // 官杀
+  const woKe = WUXING_KE[riGanWuxing];          // 财星
+  const woSheng = WUXING_SHENG[riGanWuxing];    // 食伤
   
-  switch (wangShuai) {
-    case '过强':
-      return keWo; // 用官杀克制
-    case '偏强':
-      return woSheng; // 用食伤泄秀
-    case '过弱':
-      return riGanWuxing; // 用比劫帮身
-    case '偏弱':
-      return shengWo; // 用印星生扶
-    case '中和':
-    default:
-      return shengWo; // 中和取印比为用
-  }
-}
-
-/**
- * 确定喜神
- */
-function determineXiShen(riGanWuxing: WuxingType, wangShuai: WangShuaiLevel, shenWangShuai: ShenWangShuai): WuxingType[] {
-  const keWo = WUXING_KE_WO[riGanWuxing];
-  const woKe = WUXING_KE[riGanWuxing];
-  const shengWo = WUXING_SHENG_WO[riGanWuxing];
-  const woSheng = WUXING_SHENG[riGanWuxing];
+  // 找出最强和最弱的五行
+  const sortedWuxing = [...WUXING].sort((a, b) => wuxingStrength[b] - wuxingStrength[a]);
+  const strongestWuxing = sortedWuxing[0];
+  const weakestWuxing = sortedWuxing[sortedWuxing.length - 1];
   
-  // 根据五行强弱和身旺身弱组合确定喜神
+  let yongShen: WuxingType;
+  let xiShen: WuxingType[] = [];
+  
+  // 根据日干旺衰确定用神喜神
   if (wangShuai === '过强' || wangShuai === '偏强') {
-    if (shenWangShuai === '身旺') {
-      return [woSheng, woKe]; // 身旺用食伤、财星泄气
-    } else {
-      return [shengWo]; // 身弱用印星帮扶
+    // 身强需要泄耗克
+    // 日干五行偏强时：
+    // - 泄：日干生的五行（食伤）
+    // - 耗：日干克的五行（财星）
+    // - 克：克日干的五行（官杀）
+    const xieWo = WUXING_SHENG[riGanWuxing];  // 日干生的（食伤泄身）
+    const haoWo = WUXING_KE[riGanWuxing];     // 日干克的（财星耗身）
+    const keWoWuxing = WUXING_KE_WO[riGanWuxing]; // 克日干的（官杀克身）
+    
+    // 用神优先用泄身的五行（食伤）
+    yongShen = xieWo;
+    // 喜神包括耗身的五行（财星）和克身的五行（官杀）
+    xiShen = [haoWo];
+    
+    // 如果官杀不等于用神和已有喜神，也加入喜神
+    if (keWoWuxing !== yongShen && keWoWuxing !== haoWo) {
+      xiShen.push(keWoWuxing);
     }
   } else if (wangShuai === '过弱' || wangShuai === '偏弱') {
-    if (shenWangShuai === '身旺') {
-      return [woSheng]; // 身旺用食伤泄气
+    // 身弱需要生扶
+    // 优先用印星生身，其次比劫帮身
+    if (wuxingStrength[shengWo] < wuxingStrength[keWo]) {
+      yongShen = shengWo; // 印星生身
+      xiShen = [riGanWuxing]; // 比劫帮身
     } else {
-      return [shengWo]; // 身弱用印星帮扶
+      yongShen = riGanWuxing; // 比劫帮身
+      xiShen = [shengWo]; // 印星生身
+    }
+  } else {
+    // 中和状态，根据五行平衡调整
+    // 补最弱的五行
+    yongShen = weakestWuxing;
+    // 喜神为生用神的五行
+    xiShen = [WUXING_SHENG_WO[weakestWuxing]];
+  }
+  
+  // 确保喜神不重复且不等于用神
+  xiShen = xiShen.filter(x => x !== yongShen);
+  if (xiShen.length === 0) {
+    // 如果喜神为空，添加一个合理的喜神
+    if (wangShuai === '过强' || wangShuai === '偏强') {
+      xiShen = [woKe !== yongShen ? woKe : woSheng];
+    } else {
+      xiShen = [shengWo !== yongShen ? shengWo : riGanWuxing];
     }
   }
   
-  return [shengWo];
+  return { yongShen, xiShen };
 }
 
 /**
@@ -289,14 +403,27 @@ function determineJiShen(riGanWuxing: WuxingType, wangShuai: WangShuaiLevel): Wu
   switch (wangShuai) {
     case '过强':
     case '偏强':
-      return shengWo; // 身强忌印比
+      return shengWo; // 身强忌印星再生
     case '过弱':
     case '偏弱':
-      return keWo; // 身弱忌官杀财
+      return keWo; // 身弱忌官杀克身
     case '中和':
     default:
       return keWo;
   }
+}
+
+/**
+ * 生成颜色推荐文案
+ */
+function generateColorAdvice(yongShen: WuxingType, xiShen: WuxingType[]): string {
+  const allShen: WuxingType[] = [yongShen, ...xiShen];
+  const uniqueShen: WuxingType[] = allShen.filter((item, index) => allShen.indexOf(item) === index);
+  
+  const shenNames = uniqueShen.join('和');
+  const colors = uniqueShen.map((wx: WuxingType) => WUXING_COLOR_DESC[wx]).join('、');
+  
+  return `你的喜用神是${shenNames}，${colors}的水晶会比较适合你～`;
 }
 
 /**
@@ -321,8 +448,7 @@ function generateSimpleText(result: {
     case '过弱': wangShuaiDesc = '偏弱'; break;
   }
   
-  let shenDesc = shenWangShuai === '身旺' ? '身旺' : (shenWangShuai === '身弱' ? '身衰' : '身平');
-  
+  const shenDesc = shenWangShuai === '身旺' ? '身旺' : (shenWangShuai === '身弱' ? '身衰' : '身平');
   const xiShenText = xiShen.join('、');
   
   let text = `日干为${riGanWuxing}，即五行属${riGanWuxing}，俗称的${riGanWuxing}命`;
@@ -382,38 +508,13 @@ function generateAnalysisText(result: {
   text += `【用神喜神】\n`;
   text += `• 用神为【${yongShen}】\n`;
   text += `• 喜神为【${xiShen.join('、')}】\n`;
-  text += `• 忌神为【${jiShen}】\n\n`;
-  
-  text += `【调候建议】\n`;
-  text += `在日常生活中，可以多接触与【${yongShen}】和【${xiShen[0]}】相关的事物：\n`;
-  text += getWuxingAdvice(yongShen, xiShen[0]);
-  
-  return text;
-}
-
-/**
- * 获取五行调候建议
- */
-function getWuxingAdvice(yongShen: WuxingType, xiShen: WuxingType): string {
-  const advice: Record<WuxingType, string> = {
-    '金': '• 金：白色、金色、银色；西方；金属饰品；金融、机械行业',
-    '水': '• 水：黑色、蓝色；北方；水晶、流动的水；物流、旅游行业',
-    '木': '• 木：绿色、青色；东方；植物、木制品；教育、文化行业',
-    '火': '• 火：红色、紫色；南方；灯光、阳光；电子、能源行业',
-    '土': '• 土：黄色、棕色；中央；陶瓷、玉石；房地产、农业行业',
-  };
-  
-  let text = advice[yongShen] + '\n';
-  if (xiShen !== yongShen) {
-    text += advice[xiShen] + '\n';
-  }
+  text += `• 忌神为【${jiShen}】\n`;
   
   return text;
 }
 
 /**
  * 主分析函数
- * @param paipanResult paipan.js fatemaps方法的返回结果
  */
 export function analyzeBazi(paipanResult: any): BaziAnalysisResult {
   // 提取基本信息
@@ -442,8 +543,8 @@ export function analyzeBazi(paipanResult: any): BaziAnalysisResult {
     wuxingCount[wx]++;
   }
   
-  // 计算五行力量（简化版）
-  const wuxingStrength: Record<WuxingType, number> = { ...wuxingCount };
+  // 计算五行力量（考虑藏干）
+  const wuxingStrength = calculateWuxingStrength(tianGan, diZhi, yueZhi);
   
   // 计算旺衰
   const deLing = calculateDeLing(riGanWuxing, yueZhi);
@@ -453,9 +554,8 @@ export function analyzeBazi(paipanResult: any): BaziAnalysisResult {
   const wangShuai = getWangShuaiLevel(totalScore);
   const shenWangShuai = getShenWangShuai(deDi, deShi);
   
-  // 确定用神喜神忌神
-  const yongShen = determineYongShen(riGanWuxing, wangShuai);
-  const xiShen = determineXiShen(riGanWuxing, wangShuai, shenWangShuai);
+  // 确定用神喜神忌神（使用优化后的算法）
+  const { yongShen, xiShen } = determineYongXiShen(riGanWuxing, wuxingStrength, wangShuai, shenWangShuai);
   const jiShen = determineJiShen(riGanWuxing, wangShuai);
   
   const partialResult = {
@@ -480,11 +580,13 @@ export function analyzeBazi(paipanResult: any): BaziAnalysisResult {
   // 生成分析文案
   const analysisText = generateAnalysisText(partialResult);
   const simpleText = generateSimpleText(partialResult);
+  const colorAdvice = generateColorAdvice(yongShen, xiShen);
   
   return {
     ...partialResult,
     analysisText,
     simpleText,
+    colorAdvice,
   };
 }
 
@@ -519,7 +621,10 @@ export function formatResultForCopy(result: BaziAnalysisResult, basicInfo?: {
   text += `土：${result.wuxingCount['土']}个\n\n`;
   
   text += `【分析结果】\n`;
-  text += result.simpleText;
+  text += result.simpleText + '\n\n';
+  
+  text += `【颜色推荐】\n`;
+  text += result.colorAdvice;
   
   return text;
 }
