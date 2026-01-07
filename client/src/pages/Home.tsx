@@ -617,7 +617,7 @@ export default function Home() {
         {/* 页脚 */}
         <footer className="py-6 border-t border-border/50 bg-card/50 backdrop-blur-sm">
           <div className="container text-center text-sm text-muted-foreground">
-            <p>八字排盘分析工具 · 仅供参考娱乐</p>
+            <p>© 2026 圆圆如意. All Rights Reserved.</p>
           </div>
         </footer>
       </div>
