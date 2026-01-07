@@ -206,7 +206,7 @@ export default function Home() {
                 className="w-12 h-12 opacity-80"
               />
               <h1 className="text-3xl md:text-4xl font-bold tracking-wider" style={{ fontFamily: 'var(--font-serif)' }}>
-                八字排盘分析
+                圆圆如意五行喜用神分析工具
               </h1>
             </div>
             <p className="text-muted-foreground text-lg">
