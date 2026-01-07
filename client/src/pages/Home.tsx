@@ -201,9 +201,9 @@ export default function Home() {
           <div className="container">
             <div className="flex items-center justify-center gap-4 mb-4">
               <img 
-                src="/images/bagua-symbol.png" 
-                alt="八卦" 
-                className="w-12 h-12 opacity-80"
+                src="/images/logo.png" 
+                alt="圆圆如意" 
+                className="w-12 h-12"
               />
               <h1 className="text-3xl md:text-4xl font-bold tracking-wider" style={{ fontFamily: 'var(--font-serif)' }}>
                 圆圆如意五行喜用神分析工具
