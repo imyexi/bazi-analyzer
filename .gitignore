@@ -99,6 +99,9 @@ jspm_packages/
 # Temporary folders
 tmp/
 temp/
+.playwright-cli/
+.codex-dev*
+.codex-prod*
 
 # Database
 *.db

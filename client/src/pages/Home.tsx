@@ -1,119 +1,99 @@
-/**
- * 八字排盘分析工具 - 主页面
- * 东方禅意风格设计
- */
+import { useCallback, useState } from "react";
+import { Copy, RotateCcw, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { analyzeBazi, formatResultForCopy, WUXING_CLASS, type BaziAnalysisResult } from "@/lib/baziAnalyzer";
+import { CITIES, DEFAULT_CITY, findCity, type CityInfo } from "@/lib/cityData";
+import { fatemaps, lunarToSolar } from "@/lib/paipanWrapper";
+import { parseBirthInfo } from "@/lib/textParser";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 
-import { useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Separator } from '@/components/ui/separator';
-import { toast } from 'sonner';
-import { Copy, Sparkles, RotateCcw } from 'lucide-react';
-import { parseBirthInfo } from '@/lib/textParser';
-import { fatemaps, lunarToSolar } from '@/lib/paipanWrapper';
-import { analyzeBazi, formatResultForCopy, WUXING_CLASS, type BaziAnalysisResult } from '@/lib/baziAnalyzer';
-import { CITIES, findCity, DEFAULT_CITY, type CityInfo } from '@/lib/cityData';
+const PILLAR_LABELS = ["年柱", "月柱", "日柱", "时柱"] as const;
+const WUXING_LIST = ["金", "水", "木", "火", "土"] as const;
 
 export default function Home() {
-  // 智能输入文本
-  const [smartInput, setSmartInput] = useState('');
-  
-  // 表单数据 - 默认性别为女
+  const assetBase = import.meta.env.BASE_URL;
+  const assetUrl = (file: string) => `${assetBase}${file.startsWith("/") ? file.slice(1) : file}`;
+
+  const [smartInput, setSmartInput] = useState("");
   const [year, setYear] = useState<number>(1990);
   const [month, setMonth] = useState<number>(1);
   const [day, setDay] = useState<number>(1);
   const [hour, setHour] = useState<number>(12);
   const [minute, setMinute] = useState<number>(0);
-  const [gender, setGender] = useState<'male' | 'female'>('female');
+  const [gender, setGender] = useState<"male" | "female">("female");
   const [city, setCity] = useState<CityInfo>(DEFAULT_CITY);
-  const [isLunar, setIsLunar] = useState(false); // 默认公历
-  
-  // 解析状态
+  const [isLunar, setIsLunar] = useState(false);
   const [parseConfidence, setParseConfidence] = useState<number>(0);
-  
-  // 分析结果
   const [result, setResult] = useState<BaziAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // 智能解析
   const handleSmartParse = useCallback(() => {
     if (!smartInput.trim()) {
-      toast.error('请输入生辰信息');
+      toast.error("请输入生辰信息");
       return;
     }
-    
+
     const parsed = parseBirthInfo(smartInput);
-    
+
     if (parsed.year) setYear(parsed.year);
     if (parsed.month) setMonth(parsed.month);
     if (parsed.day) setDay(parsed.day);
-    
-    // 如果没有解析到时间，默认为12:00
+
     if (parsed.hour !== undefined) {
       setHour(parsed.hour);
-      if (parsed.minute !== undefined) setMinute(parsed.minute);
+      setMinute(parsed.minute ?? 0);
     } else {
       setHour(12);
       setMinute(0);
     }
-    
-    // 性别：如果没有解析到，默认为女
-    if (parsed.gender) {
-      setGender(parsed.gender);
-    } else {
-      setGender('female');
-    }
-    
-    if (parsed.isLunar) setIsLunar(parsed.isLunar);
-    
+
+    setGender(parsed.gender ?? "female");
+    setIsLunar(Boolean(parsed.isLunar));
+
     if (parsed.location) {
-      const foundCity = findCity(parsed.location);
-      if (foundCity) setCity(foundCity);
+      const matchedCity = findCity(parsed.location);
+      if (matchedCity) setCity(matchedCity);
     }
-    
+
     setParseConfidence(parsed.confidence);
-    
+
     if (parsed.confidence >= 75) {
-      toast.success('解析成功，请确认信息');
+      toast.success("解析成功，请确认信息");
     } else if (parsed.confidence >= 50) {
-      toast.warning('部分信息已识别，请补充完善');
+      toast.warning("已识别部分信息，请补充完善");
     } else {
-      toast.error('解析结果不完整，请手动填写');
+      toast.error("解析结果不完整，请手动补全");
     }
   }, [smartInput]);
 
-  // 执行分析
   const handleAnalyze = useCallback(() => {
     setIsAnalyzing(true);
-    
+
     try {
       let actualYear = year;
       let actualMonth = month;
       let actualDay = day;
-      
-      // 如果是农历，先转换为公历
+
       if (isLunar) {
         const solarDate = lunarToSolar(year, month, day);
-        if (solarDate) {
-          actualYear = solarDate[0];
-          actualMonth = solarDate[1];
-          actualDay = solarDate[2];
-        } else {
-          toast.error('农历转换失败，请检查日期');
+        if (!solarDate) {
+          toast.error("农历转换失败，请检查日期");
           setIsAnalyzing(false);
           return;
         }
+
+        [actualYear, actualMonth, actualDay] = solarDate;
       }
-      
-      // 调用排盘
-      const genderCode = gender === 'male' ? 0 : 1;
+
       const paipanResult = fatemaps(
-        genderCode,
+        gender === "male" ? 0 : 1,
         actualYear,
         actualMonth,
         actualDay,
@@ -123,63 +103,55 @@ export default function Home() {
         city.longitude,
         city.latitude
       );
-      
+
       if (!paipanResult) {
-        toast.error('排盘失败，请检查输入信息');
+        toast.error("排盘失败，请检查输入信息");
         setIsAnalyzing(false);
         return;
       }
-      
-      // 分析八字
-      const analysisResult = analyzeBazi(paipanResult);
-      setResult(analysisResult);
-      toast.success('分析完成');
-      
+
+      setResult(analyzeBazi(paipanResult));
+      toast.success("分析完成");
     } catch (error) {
-      console.error('Analysis error:', error);
-      toast.error('分析过程出错');
+      console.error("Analysis error:", error);
+      toast.error("分析过程中出现错误");
     } finally {
       setIsAnalyzing(false);
     }
-  }, [year, month, day, hour, minute, gender, city, isLunar]);
+  }, [city, day, gender, hour, isLunar, minute, month, year]);
 
-  // 复制结果
   const handleCopy = useCallback(() => {
     if (!result) return;
-    
+
     const text = formatResultForCopy(result, {
-      gender: gender === 'male' ? '男' : '女',
-      birthDate: `${year}年${month}月${day}日${isLunar ? '（农历）' : ''}`,
+      gender: gender === "male" ? "男" : "女",
+      birthDate: `${year}年${month}月${day}日${isLunar ? "（农历）" : ""}`,
       birthTime: `${hour}时${minute}分`,
     });
-    
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success('已复制到剪贴板');
-    }).catch(() => {
-      toast.error('复制失败');
-    });
-  }, [result, gender, year, month, day, hour, minute, isLunar]);
 
-  // 复制颜色建议
+    navigator.clipboard.writeText(text).then(
+      () => toast.success("结果已复制到剪贴板"),
+      () => toast.error("复制失败")
+    );
+  }, [day, gender, hour, isLunar, minute, month, result, year]);
+
   const handleCopyColorAdvice = useCallback(() => {
     if (!result) return;
-    
-    navigator.clipboard.writeText(result.colorAdvice).then(() => {
-      toast.success('颜色建议已复制');
-    }).catch(() => {
-      toast.error('复制失败');
-    });
+
+    navigator.clipboard.writeText(result.colorAdvice).then(
+      () => toast.success("颜色建议已复制"),
+      () => toast.error("复制失败")
+    );
   }, [result]);
 
-  // 重置
   const handleReset = useCallback(() => {
-    setSmartInput('');
+    setSmartInput("");
     setYear(1990);
     setMonth(1);
     setDay(1);
     setHour(12);
     setMinute(0);
-    setGender('female');
+    setGender("female");
     setCity(DEFAULT_CITY);
     setIsLunar(false);
     setParseConfidence(0);
@@ -188,98 +160,83 @@ export default function Home() {
 
   return (
     <div className="min-h-screen relative">
-      {/* 背景图 */}
-      <div 
+      <div
         className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-30 pointer-events-none"
-        style={{ backgroundImage: 'url(/images/hero-bg.jpg)' }}
+        style={{ backgroundImage: `url(${assetUrl("images/hero-bg.jpg")})` }}
       />
-      
-      {/* 主内容 */}
+
       <div className="relative z-10">
-        {/* 头部 */}
         <header className="py-8 text-center">
           <div className="container">
             <div className="flex items-center justify-center gap-4 mb-4">
-              <img 
-                src="/images/logo.png" 
-                alt="圆圆如意" 
-                className="w-12 h-12"
-              />
-              <h1 className="text-3xl md:text-4xl font-bold tracking-wider" style={{ fontFamily: 'var(--font-serif)' }}>
+              <img src={assetUrl("images/logo.png")} alt="圆圆如意" className="w-12 h-12" />
+              <h1 className="text-3xl md:text-4xl font-bold tracking-wider" style={{ fontFamily: "var(--font-serif)" }}>
                 圆圆如意五行喜用神分析工具
               </h1>
             </div>
             <p className="text-muted-foreground text-lg">
-              ①内部工具，请勿外传，每次分析计费 ②本工具的排盘，分析从数据接口调用和复杂算法支持，非AI直接分析以及只看五行数量 ③五行为中国传统文化，博大精深，门派繁多，结果仅供参考学习。
+              内部工具，请勿外传。结果基于本地排盘与规则分析，仅供学习参考。
             </p>
           </div>
         </header>
 
-        {/* 主体内容 */}
         <main className="container pb-16">
           <div className="grid lg:grid-cols-2 gap-8">
-            {/* 左侧：输入区 */}
             <div className="space-y-6">
-              {/* 智能输入卡片 */}
               <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm">
                 <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'var(--font-serif)' }}>
+                  <CardTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: "var(--font-serif)" }}>
                     <Sparkles className="w-5 h-5 text-accent" />
                     智能输入
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Textarea
-                    placeholder="请粘贴生辰信息，支持多种格式：&#10;• 1990年5月15日 10时30分 北京 女&#10;• 19900515 10:30 北京&#10;• 1990/5/15 上午10点半 海南&#10;• 农历1990年四月廿一 巳时"
+                    placeholder={"请输入出生信息，支持：\n1990年5月15日 10:30 北京 女\n19900515 10:30 北京\n农历1990年四月初一 巳时"}
                     value={smartInput}
-                    onChange={(e) => setSmartInput(e.target.value)}
+                    onChange={event => setSmartInput(event.target.value)}
                     className="min-h-[120px] bg-background/50 resize-none"
                   />
                   <div className="flex items-center justify-between">
-                    <Button 
-                      onClick={handleSmartParse}
-                      className="btn-seal"
-                      variant="outline"
-                    >
+                    <Button onClick={handleSmartParse} className="btn-seal" variant="outline">
                       智能解析
                     </Button>
                     {parseConfidence > 0 && (
-                      <span className="text-sm text-muted-foreground">
-                        解析置信度：{parseConfidence}%
-                      </span>
+                      <span className="text-sm text-muted-foreground">解析置信度：{parseConfidence}%</span>
                     )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* 表单确认卡片 */}
               <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm">
                 <CardHeader className="pb-4">
-                  <CardTitle className="text-xl" style={{ fontFamily: 'var(--font-serif)' }}>
+                  <CardTitle className="text-xl" style={{ fontFamily: "var(--font-serif)" }}>
                     信息确认
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* 日历类型 */}
                   <div className="space-y-2">
-                    <Label>日历类型</Label>
-                    <RadioGroup 
-                      value={isLunar ? 'lunar' : 'solar'} 
-                      onValueChange={(v) => setIsLunar(v === 'lunar')}
+                    <Label>历法类型</Label>
+                    <RadioGroup
+                      value={isLunar ? "lunar" : "solar"}
+                      onValueChange={value => setIsLunar(value === "lunar")}
                       className="flex gap-6"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="solar" id="solar" />
-                        <Label htmlFor="solar" className="cursor-pointer">公历（阳历）</Label>
+                        <Label htmlFor="solar" className="cursor-pointer">
+                          公历（阳历）
+                        </Label>
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="lunar" id="lunar" />
-                        <Label htmlFor="lunar" className="cursor-pointer">农历（阴历）</Label>
+                        <Label htmlFor="lunar" className="cursor-pointer">
+                          农历（阴历）
+                        </Label>
                       </div>
                     </RadioGroup>
                   </div>
 
-                  {/* 日期 */}
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>年</Label>
@@ -288,20 +245,20 @@ export default function Home() {
                         min={1900}
                         max={2100}
                         value={year}
-                        onChange={(e) => setYear(parseInt(e.target.value) || 1990)}
+                        onChange={event => setYear(parseInt(event.target.value, 10) || 1990)}
                         className="bg-background/50"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>月</Label>
-                      <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
+                      <Select value={String(month)} onValueChange={value => setMonth(parseInt(value, 10))}>
                         <SelectTrigger className="bg-background/50">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <SelectItem key={i + 1} value={String(i + 1)}>
-                              {i + 1}月
+                          {Array.from({ length: 12 }, (_, index) => (
+                            <SelectItem key={index + 1} value={String(index + 1)}>
+                              {index + 1}月
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -309,14 +266,14 @@ export default function Home() {
                     </div>
                     <div className="space-y-2">
                       <Label>日</Label>
-                      <Select value={String(day)} onValueChange={(v) => setDay(parseInt(v))}>
+                      <Select value={String(day)} onValueChange={value => setDay(parseInt(value, 10))}>
                         <SelectTrigger className="bg-background/50">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 31 }, (_, i) => (
-                            <SelectItem key={i + 1} value={String(i + 1)}>
-                              {i + 1}日
+                          {Array.from({ length: 31 }, (_, index) => (
+                            <SelectItem key={index + 1} value={String(index + 1)}>
+                              {index + 1}日
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -324,18 +281,17 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* 时间 */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>时</Label>
-                      <Select value={String(hour)} onValueChange={(v) => setHour(parseInt(v))}>
+                      <Select value={String(hour)} onValueChange={value => setHour(parseInt(value, 10))}>
                         <SelectTrigger className="bg-background/50">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 24 }, (_, i) => (
-                            <SelectItem key={i} value={String(i)}>
-                              {i}时
+                          {Array.from({ length: 24 }, (_, index) => (
+                            <SelectItem key={index} value={String(index)}>
+                              {index}时
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -343,14 +299,14 @@ export default function Home() {
                     </div>
                     <div className="space-y-2">
                       <Label>分</Label>
-                      <Select value={String(minute)} onValueChange={(v) => setMinute(parseInt(v))}>
+                      <Select value={String(minute)} onValueChange={value => setMinute(parseInt(value, 10))}>
                         <SelectTrigger className="bg-background/50">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 60 }, (_, i) => (
-                            <SelectItem key={i} value={String(i)}>
-                              {i}分
+                          {Array.from({ length: 60 }, (_, index) => (
+                            <SelectItem key={index} value={String(index)}>
+                              {index}分
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -358,41 +314,44 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* 性别和地区 */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>性别</Label>
-                      <RadioGroup 
-                        value={gender} 
-                        onValueChange={(v) => setGender(v as 'male' | 'female')}
+                      <RadioGroup
+                        value={gender}
+                        onValueChange={value => setGender(value as "male" | "female")}
                         className="flex gap-6"
                       >
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="male" id="male" />
-                          <Label htmlFor="male" className="cursor-pointer">男（乾造）</Label>
+                          <Label htmlFor="male" className="cursor-pointer">
+                            男
+                          </Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="female" id="female" />
-                          <Label htmlFor="female" className="cursor-pointer">女（坤造）</Label>
+                          <Label htmlFor="female" className="cursor-pointer">
+                            女
+                          </Label>
                         </div>
                       </RadioGroup>
                     </div>
                     <div className="space-y-2">
                       <Label>出生地</Label>
-                      <Select 
-                        value={city.name} 
-                        onValueChange={(v) => {
-                          const found = CITIES.find(c => c.name === v);
-                          if (found) setCity(found);
+                      <Select
+                        value={city.name}
+                        onValueChange={value => {
+                          const matched = CITIES.find(item => item.name === value);
+                          if (matched) setCity(matched);
                         }}
                       >
                         <SelectTrigger className="bg-background/50">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
-                          {CITIES.map((c) => (
-                            <SelectItem key={c.name} value={c.name}>
-                              {c.name}（{c.province}）
+                          {CITIES.map(item => (
+                            <SelectItem key={item.name} value={item.name}>
+                              {item.name}（{item.province}）
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -402,20 +361,11 @@ export default function Home() {
 
                   <Separator />
 
-                  {/* 操作按钮 */}
                   <div className="flex gap-4">
-                    <Button 
-                      onClick={handleAnalyze}
-                      disabled={isAnalyzing}
-                      className="flex-1 bg-accent hover:bg-accent/90 text-white"
-                    >
-                      {isAnalyzing ? '分析中...' : '开始分析'}
+                    <Button onClick={handleAnalyze} disabled={isAnalyzing} className="flex-1 bg-accent hover:bg-accent/90 text-white">
+                      {isAnalyzing ? "分析中..." : "开始分析"}
                     </Button>
-                    <Button 
-                      onClick={handleReset}
-                      variant="outline"
-                      className="btn-seal"
-                    >
+                    <Button onClick={handleReset} variant="outline" className="btn-seal">
                       <RotateCcw className="w-4 h-4 mr-2" />
                       重置
                     </Button>
@@ -423,45 +373,37 @@ export default function Home() {
                 </CardContent>
               </Card>
 
-              {/* 五行相生相克图 */}
               <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg" style={{ fontFamily: 'var(--font-serif)' }}>
-                    五行相生相克
+                  <CardTitle className="text-lg" style={{ fontFamily: "var(--font-serif)" }}>
+                    五行生克图
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="flex justify-center">
-                  <img 
-                    src="/images/wuxing-cycle.png" 
-                    alt="五行相生相克图" 
-                    className="max-w-[280px] w-full"
-                  />
+                  <img src={assetUrl("images/wuxing-cycle.png")} alt="五行生克图" className="max-w-[280px] w-full" />
                 </CardContent>
               </Card>
             </div>
 
-            {/* 右侧：结果区 */}
             <div className="space-y-6">
               {result ? (
                 <>
-                  {/* 排盘信息卡片 */}
                   <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
                     <CardHeader className="pb-4">
-                      <CardTitle className="text-xl" style={{ fontFamily: 'var(--font-serif)' }}>
+                      <CardTitle className="text-xl" style={{ fontFamily: "var(--font-serif)" }}>
                         八字排盘
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      {/* 四柱展示 */}
                       <div className="grid grid-cols-4 gap-2 mb-6">
-                        {['年柱', '月柱', '日柱', '时柱'].map((label, index) => (
+                        {PILLAR_LABELS.map((label, index) => (
                           <div key={label} className="text-center">
                             <div className="text-xs text-muted-foreground mb-2">{label}</div>
                             <div className="bg-background/50 rounded-lg p-3 border border-border/50">
-                              <div className="text-2xl font-bold mb-1" style={{ fontFamily: 'var(--font-serif)' }}>
+                              <div className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-serif)" }}>
                                 {result.tianGan[index]}
                               </div>
-                              <div className="text-2xl font-bold" style={{ fontFamily: 'var(--font-serif)' }}>
+                              <div className="text-2xl font-bold" style={{ fontFamily: "var(--font-serif)" }}>
                                 {result.diZhi[index]}
                               </div>
                             </div>
@@ -469,21 +411,13 @@ export default function Home() {
                         ))}
                       </div>
 
-                      {/* 五行统计 */}
                       <div className="space-y-3">
                         <div className="text-sm font-medium">五行分布</div>
                         <div className="flex gap-2">
-                          {(['金', '水', '木', '火', '土'] as const).map((wx) => (
-                            <div 
-                              key={wx}
-                              className={`flex-1 text-center p-2 rounded-lg bg-background/50 border border-border/50`}
-                            >
-                              <div className={`text-lg font-bold ${WUXING_CLASS[wx]}`}>
-                                {wx}
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                {result.wuxingCount[wx]}个
-                              </div>
+                          {WUXING_LIST.map(element => (
+                            <div key={element} className="flex-1 text-center p-2 rounded-lg bg-background/50 border border-border/50">
+                              <div className={`text-lg font-bold ${WUXING_CLASS[element]}`}>{element}</div>
+                              <div className="text-sm text-muted-foreground">{result.wuxingCount[element]}个</div>
                             </div>
                           ))}
                         </div>
@@ -491,24 +425,17 @@ export default function Home() {
                     </CardContent>
                   </Card>
 
-                  {/* 分析结果卡片 */}
-                  <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in" style={{ animationDelay: '0.2s' }}>
+                  <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in" style={{ animationDelay: "0.2s" }}>
                     <CardHeader className="pb-4 flex flex-row items-center justify-between">
-                      <CardTitle className="text-xl" style={{ fontFamily: 'var(--font-serif)' }}>
+                      <CardTitle className="text-xl" style={{ fontFamily: "var(--font-serif)" }}>
                         分析结果
                       </CardTitle>
-                      <Button 
-                        onClick={handleCopy}
-                        variant="outline"
-                        size="sm"
-                        className="btn-seal"
-                      >
+                      <Button onClick={handleCopy} variant="outline" size="sm" className="btn-seal">
                         <Copy className="w-4 h-4 mr-2" />
                         复制全部
                       </Button>
                     </CardHeader>
                     <CardContent>
-                      {/* 核心信息 */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                         <div className="text-center p-3 bg-background/50 rounded-lg border border-border/50">
                           <div className="text-xs text-muted-foreground mb-1">日干</div>
@@ -518,32 +445,27 @@ export default function Home() {
                         </div>
                         <div className="text-center p-3 bg-background/50 rounded-lg border border-border/50">
                           <div className="text-xs text-muted-foreground mb-1">旺衰</div>
-                          <div className="text-xl font-bold">
-                            {result.wangShuai}
-                          </div>
+                          <div className="text-xl font-bold">{result.wangShuai}</div>
                         </div>
                         <div className="text-center p-3 bg-background/50 rounded-lg border border-border/50">
                           <div className="text-xs text-muted-foreground mb-1">用神</div>
-                          <div className={`text-xl font-bold ${WUXING_CLASS[result.yongShen]}`}>
-                            {result.yongShen}
-                          </div>
+                          <div className={`text-xl font-bold ${WUXING_CLASS[result.yongShen]}`}>{result.yongShen}</div>
                         </div>
                         <div className="text-center p-3 bg-background/50 rounded-lg border border-border/50">
                           <div className="text-xs text-muted-foreground mb-1">喜神</div>
-                          <div className={`text-xl font-bold ${WUXING_CLASS[result.xiShen[0]]}`}>
-                            {result.xiShen.join('、')}
+                          <div className={`text-xl font-bold ${result.xiShen[0] ? WUXING_CLASS[result.xiShen[0]] : ""}`}>
+                            {result.xiShen.join("、")}
                           </div>
                         </div>
                       </div>
 
-                      {/* 简洁文案（适合发送给顾客） */}
                       <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">简洁文案（可直接发送给顾客）</span>
+                          <span className="text-sm font-medium">简洁文案（可直接发送给客户）</span>
                           <Button
                             onClick={() => {
                               navigator.clipboard.writeText(result.simpleText).then(() => {
-                                toast.success('简洁文案已复制');
+                                toast.success("简洁文案已复制");
                               });
                             }}
                             variant="ghost"
@@ -554,37 +476,77 @@ export default function Home() {
                           </Button>
                         </div>
                         <div className="bg-accent/5 rounded-lg p-4 border border-accent/20">
-                          <p className="text-sm leading-relaxed">
-                            {result.simpleText}
-                          </p>
+                          <p className="text-sm leading-relaxed">{result.simpleText}</p>
                         </div>
                       </div>
 
-                      {/* 颜色推荐（调候建议） */}
                       <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium">颜色推荐</span>
-                          <Button
-                            onClick={handleCopyColorAdvice}
-                            variant="ghost"
-                            size="sm"
-                          >
+                          <Button onClick={handleCopyColorAdvice} variant="ghost" size="sm">
                             <Copy className="w-3 h-3 mr-1" />
                             复制
                           </Button>
                         </div>
                         <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
-                          <p className="text-sm leading-relaxed">
-                            {result.colorAdvice}
-                          </p>
+                          <p className="text-sm leading-relaxed">{result.colorAdvice}</p>
                         </div>
                       </div>
 
-                      {/* 详细分析文案 */}
+                      <div className="mb-4">
+                        <div className="text-sm font-medium mb-2">取用逻辑</div>
+                        <div className="bg-background/50 rounded-lg p-4 border border-border/50 space-y-3">
+                          <p className="text-sm leading-relaxed">{result.decisionSummary}</p>
+
+                          <div className="space-y-2">
+                            {result.yongShenReport.map(item => (
+                              <div
+                                key={`${item.title}-${item.element ?? "none"}`}
+                                className={`rounded-lg border p-3 ${
+                                  item.kind === "selected"
+                                    ? "border-accent/40 bg-accent/5"
+                                    : item.kind === "misjudgment"
+                                      ? "border-amber-300/40 bg-amber-50/40"
+                                      : "border-border/50 bg-card/40"
+                                }`}
+                              >
+                                <div className="text-sm font-medium mb-1">
+                                  {item.title}
+                                  {item.element ? `：${item.element}` : ""}
+                                </div>
+                                <p className="text-sm leading-relaxed">{item.body}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="space-y-2">
+                            {result.yongShenCandidates.map(candidate => (
+                              <div
+                                key={candidate.element}
+                                className={`rounded-lg border p-3 ${
+                                  candidate.selected ? "border-accent/40 bg-accent/5" : "border-border/50 bg-card/40"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-3 mb-1">
+                                  <div className="text-sm font-medium">
+                                    {candidate.selected ? "主用" : "备选"}：{candidate.element}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">评分 {candidate.score}</div>
+                                </div>
+                                <p className="text-sm leading-relaxed">{candidate.reason}</p>
+                                {!candidate.selected && candidate.rejectionReason && (
+                                  <p className="text-xs text-muted-foreground mt-1">{candidate.rejectionReason}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
                       <div>
                         <div className="text-sm font-medium mb-2">详细分析</div>
                         <div className="bg-background/50 rounded-lg p-4 border border-border/50">
-                          <pre className="whitespace-pre-wrap text-sm leading-relaxed" style={{ fontFamily: 'var(--font-sans)' }}>
+                          <pre className="whitespace-pre-wrap text-sm leading-relaxed" style={{ fontFamily: "var(--font-sans)" }}>
                             {result.analysisText}
                           </pre>
                         </div>
@@ -593,20 +555,11 @@ export default function Home() {
                   </Card>
                 </>
               ) : (
-                /* 空状态 */
                 <Card className="card-shadow border-border/50 bg-card/80 backdrop-blur-sm h-full min-h-[400px] flex items-center justify-center">
                   <CardContent className="text-center py-16">
-                    <img 
-                      src="/images/wuxing-elements.png" 
-                      alt="五行" 
-                      className="w-48 h-48 mx-auto mb-6 opacity-60"
-                    />
-                    <p className="text-muted-foreground text-lg mb-2">
-                      请输入生辰信息
-                    </p>
-                    <p className="text-muted-foreground text-sm">
-                      支持智能解析多种格式的文本
-                    </p>
+                    <img src={assetUrl("images/wuxing-elements.png")} alt="五行" className="w-48 h-48 mx-auto mb-6 opacity-60" />
+                    <p className="text-muted-foreground text-lg mb-2">请输入生辰信息</p>
+                    <p className="text-muted-foreground text-sm">支持智能解析多种格式的文本</p>
                   </CardContent>
                 </Card>
               )}
@@ -614,7 +567,6 @@ export default function Home() {
           </div>
         </main>
 
-        {/* 页脚 */}
         <footer className="py-6 border-t border-border/50 bg-card/50 backdrop-blur-sm">
           <div className="container text-center text-sm text-muted-foreground">
             <p>© 2026 圆圆如意. All Rights Reserved.</p>

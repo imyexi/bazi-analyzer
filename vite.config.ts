@@ -7,8 +7,14 @@ import { defineConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime()];
+const rawBasePath = process.env.APP_BASE_PATH?.trim() || "/";
+const normalizedBasePath =
+  rawBasePath === "/"
+    ? "/"
+    : `/${rawBasePath.replace(/^\/+|\/+$/g, "")}/`;
 
 export default defineConfig({
+  base: normalizedBasePath,
   plugins,
   resolve: {
     alias: {
