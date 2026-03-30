@@ -3,20 +3,23 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime()];
-const rawBasePath = process.env.APP_BASE_PATH?.trim() || "/";
-const normalizedBasePath =
-  rawBasePath === "/"
-    ? "/"
-    : `/${rawBasePath.replace(/^\/+|\/+$/g, "")}/`;
 
-export default defineConfig({
-  base: normalizedBasePath,
-  plugins,
-  resolve: {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, path.resolve(import.meta.dirname), "");
+  const rawBasePath = env.APP_BASE_PATH?.trim() || "/";
+  const normalizedBasePath =
+    rawBasePath === "/"
+      ? "/"
+      : `/${rawBasePath.replace(/^\/+|\/+$/g, "")}/`;
+
+  return {
+    base: normalizedBasePath,
+    plugins,
+    resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
@@ -47,4 +50,5 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
+};
 });

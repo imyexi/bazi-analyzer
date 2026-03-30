@@ -17,6 +17,37 @@ import { Textarea } from "@/components/ui/textarea";
 const PILLAR_LABELS = ["年柱", "月柱", "日柱", "时柱"] as const;
 const WUXING_LIST = ["金", "水", "木", "火", "土"] as const;
 
+async function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall back for HTTP pages or browsers that block the Clipboard API.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  textarea.style.left = "-9999px";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 export default function Home() {
   const assetBase = import.meta.env.BASE_URL;
   const assetUrl = (file: string) => `${assetBase}${file.startsWith("/") ? file.slice(1) : file}`;
@@ -129,19 +160,27 @@ export default function Home() {
       birthTime: `${hour}时${minute}分`,
     });
 
-    navigator.clipboard.writeText(text).then(
-      () => toast.success("结果已复制到剪贴板"),
-      () => toast.error("复制失败")
-    );
+    void copyText(text).then((copied) => {
+      if (copied) {
+        toast.success("结果已复制到剪贴板");
+        return;
+      }
+
+      toast.error("复制失败，请手动长按或选择文本复制");
+    });
   }, [day, gender, hour, isLunar, minute, month, result, year]);
 
   const handleCopyColorAdvice = useCallback(() => {
     if (!result) return;
 
-    navigator.clipboard.writeText(result.colorAdvice).then(
-      () => toast.success("颜色建议已复制"),
-      () => toast.error("复制失败")
-    );
+    void copyText(result.colorAdvice).then((copied) => {
+      if (copied) {
+        toast.success("颜色建议已复制");
+        return;
+      }
+
+      toast.error("复制失败，请手动长按或选择文本复制");
+    });
   }, [result]);
 
   const handleReset = useCallback(() => {
@@ -464,8 +503,13 @@ export default function Home() {
                           <span className="text-sm font-medium">简洁文案（可直接发送给客户）</span>
                           <Button
                             onClick={() => {
-                              navigator.clipboard.writeText(result.simpleText).then(() => {
-                                toast.success("简洁文案已复制");
+                              void copyText(result.simpleText).then((copied) => {
+                                if (copied) {
+                                  toast.success("简洁文案已复制");
+                                  return;
+                                }
+
+                                toast.error("复制失败，请手动长按或选择文本复制");
                               });
                             }}
                             variant="ghost"
